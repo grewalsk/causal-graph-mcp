@@ -43,6 +43,117 @@ pip install mcp jedi watchdog
 
 ---
 
+## Usage Guide
+
+Once registered, start a new Claude Code session in any Python project. The server auto-indexes on first use and keeps the graph current via file watcher — you don't need to think about it after setup.
+
+### Onboarding to an unfamiliar codebase
+
+When you first open a project you've never seen before:
+
+```
+> "Use project_map to give me an overview of this codebase"
+```
+
+This returns the module structure, entry points (functions nobody calls — likely CLI commands, API handlers, or main functions), the hottest symbols (most depended-on), and what percentage of public functions have test assertions covering them. It's the fastest way to understand what a project does and where to start reading.
+
+```
+> "Search for functions related to payment processing"
+```
+
+Semantic search uses BM25 over function names, signatures, and docstrings. When you know *what* you're looking for but not *where* it lives, this is faster than grep because it ranks by relevance across all three fields.
+
+### Before making a change
+
+This is the primary use case. Before you edit a function that other code depends on:
+
+```
+> "Run impact analysis on billing.charge_customer"
+```
+
+This traces all callers, but unlike a simple call graph, it also checks:
+- Which tests assert on `charge_customer` (those will fail)
+- Whether `charge_customer` mutates shared state (other readers of that state are at risk)
+- Whether callers have side effects like network calls or file writes (those are higher-risk breakages)
+
+Each downstream symbol gets a risk score. High-risk items are the ones you need to check before committing.
+
+```
+> "Get the call graph for billing.charge_customer, callers only, 4 hops"
+```
+
+When you want the raw dependency tree without risk scoring — useful for understanding the call chain structure before deciding what to refactor.
+
+### During a refactoring
+
+When you're renaming a method, changing a return type, or restructuring a class:
+
+```
+> "Show me the symbol details for models.Order.calculate_total"
+```
+
+This returns the full source code of the function, its signature, docstring, and every edge — who calls it, what it calls, what state it mutates, which tests assert on it, and any side effects. All in one response.
+
+```
+> "Find all mutations of Order.total_amount"
+```
+
+When you're changing a field and need to know every function that writes to it. Mutation tracking catches `self.total_amount = ...` assignments across the entire codebase, so you don't miss a setter hiding in a different module.
+
+### Investigating a bug
+
+When a test fails and you need to trace the cause:
+
+```
+> "Get the call graph for test_checkout.test_discount_applied, callees, 5 hops"
+```
+
+Follow the callees of a failing test to see the full execution path — what does the test call, what do those functions call, and where might the breakage be? Confidence scores help you distinguish between definitely-called functions (1.0) and dynamically-dispatched ones (0.5) that might not be on the actual execution path.
+
+```
+> "Search for functions related to discount"
+> "Run impact analysis on pricing.apply_discount"
+```
+
+Combine search to find the suspect function, then impact analysis to see everything downstream. If the bug is in `apply_discount`, impact analysis tells you which other tests *should* also be failing — and if they're not, that's a clue about what's different.
+
+### Reviewing a PR
+
+When reviewing someone else's changes, ask about the files they touched:
+
+```
+> "Run impact analysis on auth.refresh_token"
+> "Find all mutations of Session.expires_at"
+```
+
+Impact analysis on the changed functions tells you what the reviewer should be checking. Mutation tracking on modified fields surfaces hidden coupling the PR author might not have considered.
+
+### Keeping the graph current
+
+The file watcher handles this automatically — every time you save a `.py` file, the graph re-indexes that file within 300ms. You only need manual re-indexing after:
+
+- First-time setup (happens automatically on first tool call)
+- Pulling a large upstream diff with many changed files
+- Adding a new directory that wasn't being watched
+
+```
+> "Re-index the project"
+```
+
+### Tool reference
+
+| When you need to... | Use this tool | Example prompt |
+|---|---|---|
+| Orient yourself in a new codebase | `project_map` | *"Give me a project overview"* |
+| Find a function by concept | `semantic_search` | *"Search for error handling functions"* |
+| Understand one function in depth | `get_symbol` | *"Show me details for auth.create_token"* |
+| See the dependency tree | `get_call_graph` | *"Call graph for login_handler, callers, 3 hops"* |
+| Know what will break before editing | `impact_analysis` | *"Impact analysis on charge_customer"* |
+| Track who writes to a field | `find_mutations` | *"Find mutations of User.email"* |
+| Force a full re-index | `index_project` | *"Re-index the project"* |
+
+---
+
 ## How It Works
 
 ```
