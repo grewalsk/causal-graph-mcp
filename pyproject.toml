@@ -4,13 +4,19 @@ build-backend = "hatchling.build"
 
 [project]
 name = "causal-graph-mcp"
-version = "0.0.1"
-description = "MCP server that indexes Python codebases into a causal dependency graph"
+version = "0.2.0"
+description = "MCP server that indexes multi-language codebases into a causal dependency graph"
 requires-python = ">=3.11"
 dependencies = [
     "mcp",
     "jedi",
     "watchdog",
+    "tree-sitter",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "tree-sitter-go",
+    "tree-sitter-rust",
+    "tree-sitter-java",
 ]
 
 [project.optional-dependencies]

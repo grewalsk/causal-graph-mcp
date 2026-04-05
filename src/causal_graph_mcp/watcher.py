@@ -46,7 +46,9 @@ class _DebouncedHandler(FileSystemEventHandler):
         self._handle(event.src_path)
 
     def _handle(self, path: str) -> None:
-        if not path.endswith(".py"):
+        from causal_graph_mcp.language import get_source_extensions
+        valid_exts = get_source_extensions() | {".py"}
+        if not any(path.endswith(ext) for ext in valid_exts):
             return
         if self._should_ignore(path):
             return

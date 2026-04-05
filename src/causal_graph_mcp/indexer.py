@@ -10,6 +10,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
+from causal_graph_mcp.language import get_parser, get_source_extensions, supported_extensions
 from causal_graph_mcp.parser import parse_file
 from causal_graph_mcp.resolver import resolve_calls
 from causal_graph_mcp.storage import Storage
@@ -79,8 +80,9 @@ def index_files(
     start = time.monotonic()
     result = IndexResult()
 
+    valid_exts = get_source_extensions() | {".py"}
     for file_path in file_paths:
-        if not file_path.endswith(".py"):
+        if Path(file_path).suffix.lower() not in valid_exts:
             continue
         if not Path(file_path).is_file():
             continue
@@ -100,7 +102,9 @@ def _discover_files(project_root: str) -> list[str]:
     """
     root = Path(project_root)
     gitignore_patterns = _parse_gitignore(project_root)
-    py_files: list[str] = []
+    source_files: list[str] = []
+    # Collect all known source extensions (registered parsers + known types)
+    valid_exts = get_source_extensions() | {".py"}
 
     for dirpath, dirnames, filenames in os.walk(root):
         # Remove excluded directories in-place to prevent os.walk from descending
@@ -114,14 +118,15 @@ def _discover_files(project_root: str) -> list[str]:
         ]
 
         for filename in filenames:
-            if not filename.endswith(".py"):
+            ext = Path(filename).suffix.lower()
+            if ext not in valid_exts:
                 continue
             full_path = os.path.join(dirpath, filename)
             rel_path = os.path.relpath(full_path, root)
             if not _matches_gitignore(rel_path, gitignore_patterns):
-                py_files.append(full_path)
+                source_files.append(full_path)
 
-    return py_files
+    return source_files
 
 
 def _parse_gitignore(project_root: str) -> list[str]:
@@ -232,11 +237,19 @@ def _index_file(
     """
     module_name = _derive_module_name(file_path, project_root)
 
-    # Parse
-    parse_result = parse_file(file_path, module_name)
+    # Use language-specific parser if available, fall back to Python parser
+    parser = get_parser(file_path)
+    if parser:
+        parse_result = parser.parse(file_path, module_name)
+    else:
+        # Fall back to Python parser for .py files (always available)
+        parse_result = parse_file(file_path, module_name)
 
-    # Resolve call edges
-    resolved_edges = resolve_calls(parse_result.edges, project_root)
+    # Resolve call edges (jedi only works for Python, but the function is safe for others)
+    if file_path.endswith(".py"):
+        resolved_edges = resolve_calls(parse_result.edges, project_root)
+    else:
+        resolved_edges = parse_result.edges
 
     # Compute hash
     file_hash = _compute_file_hash(file_path)

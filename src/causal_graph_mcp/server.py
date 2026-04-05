@@ -1,4 +1,4 @@
-"""MCP server entry point with all 7 tool handlers."""
+"""MCP server entry point with all tool handlers."""
 
 import json
 import logging
@@ -8,10 +8,14 @@ from typing import Any
 
 from mcp.server import FastMCP
 
+from causal_graph_mcp.cross_language import detect_cross_language_edges
 from causal_graph_mcp.graph import get_subgraph
 from causal_graph_mcp.indexer import IndexResult, index_files, index_project
+from causal_graph_mcp.language import register_parser
+from causal_graph_mcp.python_parser import PythonParser
 from causal_graph_mcp.risk import compute_impact
 from causal_graph_mcp.storage import Storage
+from causal_graph_mcp.ts_parser import TreeSitterParser
 from causal_graph_mcp.watcher import FileWatcher
 
 logger = logging.getLogger(__name__)
@@ -24,9 +28,27 @@ _server_project_root: str = ""
 _server_watcher: "FileWatcher | None" = None
 
 
+def _register_parsers() -> None:
+    """Register all available language parsers."""
+    register_parser(PythonParser())
+    # Tree-sitter based parsers
+    for lang, exts in [
+        ("javascript", [".js", ".jsx"]),
+        ("typescript", [".ts", ".tsx"]),
+        ("go", [".go"]),
+        ("rust", [".rs"]),
+        ("java", [".java"]),
+    ]:
+        try:
+            register_parser(TreeSitterParser(lang, exts))
+        except Exception:
+            pass  # Grammar not installed, skip
+
+
 def _get_storage() -> Storage:
     global _server_storage, _server_project_root, _server_watcher
     if _server_storage is None:
+        _register_parsers()
         _server_project_root = os.getcwd()
         _server_storage = Storage(Path(_server_project_root))
         # Auto-index on startup
@@ -286,6 +308,27 @@ def create_server() -> FastMCP:
         return json.dumps(_truncate({
             "target": symbol_id,
             "mutated_by": mutated_by,
+        }))
+
+    @server.tool()
+    def cross_language_edges() -> str:
+        """Detect cross-language dependencies by matching REST route definitions to HTTP client calls across languages. Finds where frontend calls backend, service-to-service API calls, etc."""
+        storage = _get_storage()
+        edges = detect_cross_language_edges(storage)
+        return json.dumps(_truncate({
+            "cross_language_edges": [
+                {
+                    "caller": e["src"],
+                    "caller_language": e["src_language"],
+                    "handler": e["dst"],
+                    "handler_language": e["dst_language"],
+                    "integration": e["integration"],
+                    "contract": e["contract"],
+                    "confidence": e["confidence"],
+                }
+                for e in edges
+            ],
+            "total": len(edges),
         }))
 
     return server
