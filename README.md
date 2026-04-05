@@ -624,7 +624,72 @@ Optional `.causal-graph/config.json` at project root:
 
 ## Limitations
 
-- **Python only** — no support for other languages.
 - **Dynamic dispatch** — duck-typed interfaces and metaprogramming-generated callables will be missed. The server annotates symbols with unresolvable callers rather than silently under-reporting.
 - **No cross-project resolution** — edges to symbols in external packages (e.g., `requests.get`) are stored but not resolved to their source definitions.
 - **No incremental edge cleanup on delete** — deleted files' nodes/edges are cleaned up lazily, not immediately.
+- **Tree-sitter languages lack type-aware resolution** — JS/TS/Go/Rust/Java use AST-only call resolution (no equivalent of jedi). Unresolved calls get confidence 0.3. Adding language servers (tsserver, gopls, rust-analyzer) would upgrade these.
+- **Cross-language detection is URL-pattern only** — only catches REST API calls via string matching. Dynamic URLs, gRPC, database sharing, and message queues aren't detected yet.
+
+---
+
+## Roadmap
+
+This is where the project is headed. Contributions welcome — each item is a self-contained piece of work.
+
+### More languages
+
+| Language | Status | What's needed |
+|----------|--------|---------------|
+| Python | Full support | ast + jedi, all edge types |
+| JavaScript | Parsing done | Add tsserver for type-aware call resolution |
+| TypeScript | Parsing done | Add tsserver for type-aware call resolution |
+| Go | Parsing done | Add gopls for cross-package call resolution |
+| Rust | Parsing done | Add rust-analyzer for trait method resolution |
+| Java | Parsing done | Add Eclipse JDT or java LSP for type resolution |
+| C# | Not started | tree-sitter-c-sharp grammar exists, needs parser config |
+| Ruby | Not started | tree-sitter-ruby grammar exists |
+| PHP | Not started | tree-sitter-php grammar exists |
+| Kotlin | Not started | tree-sitter-kotlin grammar exists |
+| Swift | Not started | tree-sitter-swift grammar exists |
+
+Adding a new language is mostly configuration — define the node types, side-effect patterns, test patterns, and import parsing for the `TreeSitterParser`. The tree-sitter grammar does the heavy lifting.
+
+### Better cross-language detection
+
+The current REST route matching covers the most common case (frontend calls backend), but real multi-language codebases have more integration patterns:
+
+| Integration | Approach | Confidence | Status |
+|-------------|----------|------------|--------|
+| REST APIs | URL pattern matching | ~0.7 | Done |
+| gRPC / Protobuf | Parse `.proto` files, match service methods to generated stubs | ~0.9 | Planned |
+| GraphQL | Parse `.graphql` schemas, match query/mutation names to resolvers | ~0.85 | Planned |
+| Database tables | Parse SQL migrations + ORM models, match table read/write across languages | ~0.7 | Planned |
+| Message queues | Match Kafka topic names, RabbitMQ exchanges, Celery task names across languages | ~0.65 | Planned |
+| Shared config | Trace env var references across docker-compose, k8s manifests, and source | ~0.5 | Planned |
+| FFI / bindings | Detect `ctypes`, `extern "C"`, cgo `import "C"`, match symbol names | ~0.75 | Planned |
+| OpenTelemetry | Runtime trace collection to validate static edges with ground truth | ~1.0 | Planned |
+
+**gRPC/Protobuf** is the highest-value next step — `.proto` files are explicit contracts with typed service definitions, so matching is nearly exact. A Python gRPC client calling a Go gRPC server through a shared `.proto` would produce a confidence 0.9 edge.
+
+**OpenTelemetry** is the long-term play — instrument services with OTel, run integration tests, collect distributed traces, and use the trace data to validate and improve confidence scores on statically-detected edges. A static edge confirmed by a runtime trace gets upgraded to confidence 1.0.
+
+### Type-aware resolution for non-Python languages
+
+Right now, only Python gets type-aware call resolution via jedi. The other languages resolve calls against same-file definitions and imports, leaving cross-file method calls at confidence 0.3. Adding language server integration would fix this:
+
+| Language | Language Server | What it unlocks |
+|----------|----------------|-----------------|
+| JS/TS | tsserver | Resolve `obj.method()` to the correct class definition across files |
+| Go | gopls | Resolve interface method calls, cross-package imports |
+| Rust | rust-analyzer | Resolve trait method implementations, generic type calls |
+| Java | Eclipse JDT LS | Resolve inheritance hierarchies, interface implementations |
+
+The architecture is ready for this — `resolver.py` is a post-processing step that takes edges and upgrades confidence. Each language would get its own resolver that follows the same pattern: take 0.3-confidence edges, ask the language server, upgrade to 0.5 if resolved.
+
+### Other ideas
+
+- **Monorepo support** — detect service boundaries automatically from build configs (Bazel, Nx, Lerna) and scope indexing per service
+- **Git-aware impact analysis** — combine the causal graph with `git diff` to automatically run impact analysis on every changed function in a PR
+- **Embedding-based search** — augment FTS5 BM25 with vector embeddings for semantic concept search ("find the rate limiter" when no function mentions "rate limit" in its name)
+- **Visualization** — export the graph as DOT or D3 JSON for interactive dependency visualization
+- **CI integration** — run as a GitHub Action that comments on PRs with impact analysis results
