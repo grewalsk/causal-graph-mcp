@@ -178,6 +178,64 @@ The file watcher handles this automatically — every time you save a `.py` file
 | Know what will break before editing | `impact_analysis` | *"Impact analysis on charge_customer"* |
 | Track who writes to a field | `find_mutations` | *"Find mutations of User.email"* |
 | Force a full re-index | `index_project` | *"Re-index the project"* |
+| Find cross-language API dependencies | `cross_language_edges` | *"Detect cross-language edges"* |
+
+---
+
+## Multi-Language Support
+
+The graph indexes 6 languages, not just Python. Each language gets full structural analysis — functions, classes, call edges, mutation edges, side-effect edges, imports, and inheritance.
+
+| Language | Parser | Call Resolution |
+|----------|--------|----------------|
+| Python | `ast` + `jedi` | Type-aware (jedi resolves method receivers) |
+| JavaScript | tree-sitter | AST-only (same-file + import resolution) |
+| TypeScript | tree-sitter | AST-only |
+| Go | tree-sitter | AST-only |
+| Rust | tree-sitter | AST-only |
+| Java | tree-sitter | AST-only |
+
+Python gets the highest-fidelity resolution because `jedi` does type inference. The other languages use tree-sitter for parsing and resolve calls against same-file definitions and import statements. Unresolved calls get confidence 0.3 — they're included in the graph but flagged as uncertain.
+
+All the tools work the same across languages. `impact_analysis` on a Go function works exactly like it does on a Python function — same risk formula, same edge types, same output.
+
+### Cross-Language Edge Detection
+
+In multi-language codebases, the most common dependency between languages is **one service calling another's API**. The `cross_language_edges` tool detects these by matching REST route definitions against HTTP client calls.
+
+```
+> "Detect cross-language edges"
+```
+
+It works by scanning the indexed graph for two patterns:
+
+**Route definitions** — framework-specific decorators and method calls that register HTTP endpoints:
+
+| Framework | Pattern |
+|-----------|---------|
+| Flask / FastAPI | `@app.get("/api/users")` |
+| Express | `app.get("/api/users", handler)` |
+| Gin (Go) | `r.GET("/api/users", handler)` |
+| Spring (Java) | `@GetMapping("/api/users")` |
+
+**HTTP client calls** — fetch, axios, requests, or language-specific HTTP libraries:
+
+| Client | Pattern |
+|--------|---------|
+| JS/TS fetch | `fetch("/api/users")` |
+| JS/TS axios | `axios.get("/api/users")` |
+| Python requests | `requests.get("https://host/api/users")` |
+| Go net/http | `http.Get("https://host/api/users")` |
+
+When a client URL matches a route definition (handling path parameters like `/users/:id` and stripping hostnames), it creates a cross-language edge with confidence ~0.7.
+
+This means if you change a Python Flask handler, `impact_analysis` can trace across the language boundary and tell you which JavaScript functions call that endpoint.
+
+**What it doesn't catch:**
+- Dynamic URLs built from variables (`fetch(baseUrl + path)`)
+- gRPC/protobuf service calls (planned)
+- Database-level dependencies (Go writes a table, Python reads it — planned)
+- Message queue pub/sub connections (planned)
 
 ---
 
