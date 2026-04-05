@@ -2,7 +2,7 @@
 
 A Python MCP server that indexes a Python codebase into a persistent **causal dependency graph** stored in SQLite, exposing it to Claude Code as a set of structural query tools.
 
-The core differentiator over existing tools like is the **edge model**. Beyond standard call and import edges, the graph tracks:
+The core differentiator over existing tools is the **edge model**. Beyond standard call and import edges, the graph tracks:
 
 - **Mutation edges** — what state a function writes (`self.token = ...`)
 - **Assertion edges** — what tests assert on which symbols
