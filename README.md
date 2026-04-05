@@ -1,15 +1,42 @@
 # causal-graph-mcp
 
-A Python MCP server that indexes a Python codebase into a persistent **causal dependency graph** stored in SQLite, exposing it to Claude Code as a set of structural query tools.
+## The Problem
 
-The core differentiator over existing tools is the **edge model**. Beyond standard call and import edges, the graph tracks:
+Claude Code is powerful at editing code, but it's flying blind when it comes to **understanding what will break**. When you ask it to change a function, it doesn't know:
 
-- **Mutation edges** — what state a function writes (`self.token = ...`)
-- **Assertion edges** — what tests assert on which symbols
-- **Side-effect edges** — file I/O, network calls, cache writes, subprocess invocations
-- **Inheritance and override edges** — class hierarchies and method overrides
+- What other functions call it
+- Which tests will fail
+- Whether it mutates shared state that other code reads
+- Whether callers have side effects like network calls or file writes that make breakage more costly
 
-This richer graph makes impact analysis genuinely accurate: not just "what's reachable from this function" but "what will actually break and which tests will fail."
+Existing code-graph tools (like `code-graph-mcp`) only track **call and import edges** — they can tell you "what's reachable from this function" but not "what will actually break." A function might be reachable via 3 call hops, but if nothing along that path asserts on it or mutates shared state, it's probably fine. Reachability is not risk.
+
+Without this context, Claude Code either makes changes conservatively (touching less than it should) or confidently (breaking things it didn't know depended on the change). Both waste your time.
+
+## What This Solves
+
+causal-graph-mcp gives Claude Code a **pre-computed causal dependency graph** of your Python codebase before it makes multi-file edits.
+
+**A causal dependency graph** maps not just *what calls what*, but *what causes what to change*. In a regular call graph, an edge from A to B means "A calls B." In a causal graph, edges also capture:
+
+- A **writes to** a field that B **reads** (mutation edge) — changing A's write logic breaks B's assumptions
+- A **test asserts on** B's output (assertion edge) — changing B will fail that test
+- A performs **I/O as a consequence** of calling B (side-effect edge) — a breakage here isn't just a failed test, it's a failed API call or corrupted file
+
+The "causal" part means: if you change node X, you can trace forward through these edges to find everything that will *actually be affected* — not just everything that's syntactically connected. A function 4 hops away via call edges might have zero risk if nothing along that path asserts on it or shares state with it. A function 1 hop away with an assertion edge and a side-effect is critical.
+
+The graph tracks these specific edge types:
+
+- **Mutation edges** — what state a function writes (`self.token = ...`), so you know who's reading that state downstream
+- **Assertion edges** — what tests assert on which symbols, so you know exactly which tests will fail
+- **Side-effect edges** — file I/O, network calls, cache writes, subprocess invocations — so you know which breakages have real-world consequences
+- **Inheritance and override edges** — class hierarchies and method overrides, so polymorphic dispatch is visible
+
+This means `impact_analysis` can answer: *"If I change `auth.create_token`, then `test_auth.test_login` will fail (it asserts on the return value), `Session.save` is at risk (it mutates `Session.token` using the output), and `views.login_handler` has a network side-effect in its caller chain (higher cost if broken)."*
+
+That's not reachability. That's a ranked risk assessment with causal evidence.
+
+The server runs locally over stdio with zero infrastructure — a single SQLite file, three pip dependencies, and a file watcher that keeps the graph current on every save.
 
 ---
 
