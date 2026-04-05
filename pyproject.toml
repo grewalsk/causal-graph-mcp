@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "causal-graph-mcp"
+version = "0.0.1"
+description = "MCP server that indexes Python codebases into a causal dependency graph"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp",
+    "jedi",
+    "watchdog",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[project.scripts]
+causal-graph-mcp = "causal_graph_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/causal_graph_mcp"]
