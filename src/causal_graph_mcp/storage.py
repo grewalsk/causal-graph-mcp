@@ -16,7 +16,7 @@ class Storage:
         db_dir = project_root / ".causal-graph"
         db_dir.mkdir(parents=True, exist_ok=True)
         self._db_path = db_dir / "index.db"
-        self._conn = sqlite3.connect(str(self._db_path))
+        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         # FK enforcement disabled: edges legitimately reference external symbols

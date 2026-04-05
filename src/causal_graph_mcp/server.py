@@ -12,6 +12,7 @@ from causal_graph_mcp.graph import get_subgraph
 from causal_graph_mcp.indexer import IndexResult, index_files, index_project
 from causal_graph_mcp.risk import compute_impact
 from causal_graph_mcp.storage import Storage
+from causal_graph_mcp.watcher import FileWatcher
 
 logger = logging.getLogger(__name__)
 
@@ -20,10 +21,11 @@ _MAX_RESPONSE_CHARS = 32000
 
 _server_storage: "Storage | None" = None
 _server_project_root: str = ""
+_server_watcher: "FileWatcher | None" = None
 
 
 def _get_storage() -> Storage:
-    global _server_storage, _server_project_root
+    global _server_storage, _server_project_root, _server_watcher
     if _server_storage is None:
         _server_project_root = os.getcwd()
         _server_storage = Storage(Path(_server_project_root))
@@ -36,6 +38,15 @@ def _get_storage() -> Storage:
             result.files_parsed,
             result.duration_ms,
         )
+        # Start file watcher for incremental re-indexing
+        storage_ref = _server_storage
+        root_ref = _server_project_root
+
+        def _on_change(files: list[str]) -> None:
+            index_files(files, root_ref, storage_ref)
+
+        _server_watcher = FileWatcher(_server_project_root, _on_change)
+        _server_watcher.start()
     return _server_storage
 
 
