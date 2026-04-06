@@ -10,6 +10,9 @@ from mcp.server import FastMCP
 
 from causal_graph_mcp.cross_language import detect_cross_language_edges
 from causal_graph_mcp.graph import get_subgraph
+from causal_graph_mcp.visualize import (
+    render_impact_tree, render_mermaid, render_mermaid_impact, render_tree,
+)
 from causal_graph_mcp.indexer import IndexResult, index_files, index_project
 from causal_graph_mcp.language import register_parser
 from causal_graph_mcp.python_parser import PythonParser
@@ -330,6 +333,34 @@ def create_server() -> FastMCP:
             ],
             "total": len(edges),
         }))
+
+    @server.tool()
+    def visualize_graph(
+        symbol: str,
+        direction: str = "both",
+        max_hops: int = 3,
+        min_confidence: float = 0.0,
+        format: str = "tree",
+    ) -> str:
+        """Visualize a symbol's call graph inline. Format: 'tree' for text tree with edge metadata, 'mermaid' for Mermaid diagram. Use 'tree' for detailed analysis, 'mermaid' for visual overview."""
+        storage = _get_storage()
+        subgraph = get_subgraph(storage, symbol, direction, max_hops, min_confidence)
+        if format == "mermaid":
+            return render_mermaid(subgraph)
+        return render_tree(subgraph)
+
+    @server.tool()
+    def visualize_impact(
+        symbol: str,
+        max_hops: int = 4,
+        format: str = "tree",
+    ) -> str:
+        """Visualize impact analysis results inline. Format: 'tree' for risk-annotated text tree, 'mermaid' for color-coded Mermaid diagram."""
+        storage = _get_storage()
+        impact = compute_impact(storage, symbol, max_hops)
+        if format == "mermaid":
+            return render_mermaid_impact(impact)
+        return render_impact_tree(impact)
 
     return server
 
