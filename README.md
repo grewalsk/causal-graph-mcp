@@ -179,6 +179,80 @@ The file watcher handles this automatically — every time you save a `.py` file
 | Track who writes to a field | `find_mutations` | *"Find mutations of User.email"* |
 | Force a full re-index | `index_project` | *"Re-index the project"* |
 | Find cross-language API dependencies | `cross_language_edges` | *"Detect cross-language edges"* |
+| Visualize a call graph inline | `visualize_graph` | *"Visualize the graph for create_token"* |
+| Visualize impact with risk levels | `visualize_impact` | *"Visualize impact of create_token"* |
+
+### Visualization examples
+
+Two inline formats are available: `tree` (default) for detailed analysis, and `mermaid` for visual diagrams.
+
+**Call graph — tree format:**
+
+Shows every edge with type, confidence score, and flags. Callers (←) and callees (→) grouped, with second-level connections indented.
+
+```
+auth.create_token (root)
+├── ← auth.Session.save [calls, 1.0]
+│   └── → auth.Session.token [mutates, 1.0]
+├── ← test_auth.test_create_token [calls, 0.8] ⚠ TEST
+│   ├── → result [asserts_on, 1.0]
+│   └── → test_auth.result [mutates, 0.8]
+├── ← views.login_handler [calls, 0.8]
+│   └── → views.token [mutates, 0.8]
+├── → hashlib.sha256 [calls, 0.8]
+└── → builtins.str [calls, 0.5]
+```
+
+**Call graph — mermaid format:**
+
+Renders as a visual diagram in Claude Code. Solid arrows for high confidence, dashed for low. Test nodes highlighted in red.
+
+```mermaid
+graph LR
+    N0["auth.create_token"]
+    N1["auth.Session.save"]
+    N2["test_auth.test_create_token ⚠"]:::test
+    N3["views.login_handler"]
+    N1 -->|"calls 1.0"| N0
+    N2 -->|"calls 0.8"| N0
+    N3 -->|"calls 0.8"| N0
+
+    classDef test fill:#fee,stroke:#c33
+```
+
+**Impact analysis — tree format:**
+
+Groups downstream symbols by risk level. Shows risk score, causal factors, and test flags.
+
+```
+auth.create_token (changing)
+┌─ HIGH RISK ──────────────────
+│ ▲ 2.25   test_auth.test_create_token [mutates:test_auth.result, asserts_on:result] ⚠ TEST
+│ ▲ 1.5    auth.Session.save [mutates:auth.Session.token]
+│ ▲ 1.5    views.login_handler [mutates:views.token]
+
+Summary: 3 high, 0 medium, 0 low, 1 test(s) at risk
+```
+
+**Impact analysis — mermaid format:**
+
+Color-coded by risk: red = high, orange = medium, green = low. Changed symbol in blue.
+
+```mermaid
+graph LR
+    ROOT["auth.create_token"]:::changed
+    R0["test_auth.test_create_token ⚠<br/>risk: 2.25"]:::high
+    ROOT --> R0
+    R1["auth.Session.save<br/>risk: 1.5"]:::high
+    ROOT --> R1
+    R2["views.login_handler<br/>risk: 1.5"]:::high
+    ROOT --> R2
+
+    classDef changed fill:#bbf,stroke:#33a
+    classDef high fill:#fcc,stroke:#c33
+    classDef medium fill:#fed,stroke:#ca3
+    classDef low fill:#cfc,stroke:#3a3
+```
 
 ---
 
