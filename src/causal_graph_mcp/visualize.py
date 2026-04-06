@@ -223,9 +223,10 @@ def render_mermaid(subgraph: SubgraphResult) -> str:
         else:
             lines.append(f"    {src_id} -..->|\"{label}\"| {dst_id}")
 
-    # Edge type styling
+    # Styling
     lines.append("")
-    lines.append("    classDef test fill:#fee,stroke:#c33")
+    lines.append("    classDef default fill:#f1f5f9,stroke:#64748b,color:#1e293b")
+    lines.append("    classDef test fill:#fbbf24,stroke:#d97706,color:#1e293b")
 
     lines.append("```")
     return "\n".join(lines)
@@ -269,10 +270,10 @@ def render_mermaid_impact(impact: ImpactResult) -> str:
             lines.append(f"    ROOT -.-> {node_id}")
 
     lines.append("")
-    lines.append("    classDef changed fill:#bbf,stroke:#33a")
-    lines.append("    classDef high fill:#fcc,stroke:#c33")
-    lines.append("    classDef medium fill:#fed,stroke:#ca3")
-    lines.append("    classDef low fill:#cfc,stroke:#3a3")
+    lines.append("    classDef changed fill:#6366f1,stroke:#4338ca,color:#fff")
+    lines.append("    classDef high fill:#ef4444,stroke:#b91c1c,color:#fff")
+    lines.append("    classDef medium fill:#f59e0b,stroke:#d97706,color:#1e293b")
+    lines.append("    classDef low fill:#22c55e,stroke:#15803d,color:#fff")
 
     s = impact.summary
     lines.append("```")

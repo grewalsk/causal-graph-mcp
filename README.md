@@ -209,15 +209,17 @@ Renders as a visual diagram in Claude Code. Solid arrows for high confidence, da
 
 ```mermaid
 graph LR
-    N0["auth.create_token"]
-    N1["auth.Session.save"]
+    N0["auth.create_token"]:::root
+    N1["auth.Session.save"]:::func
     N2["test_auth.test_create_token ⚠"]:::test
-    N3["views.login_handler"]
+    N3["views.login_handler"]:::func
     N1 -->|"calls 1.0"| N0
     N2 -->|"calls 0.8"| N0
     N3 -->|"calls 0.8"| N0
 
-    classDef test fill:#fee,stroke:#c33
+    classDef root fill:#6366f1,stroke:#4338ca,color:#fff
+    classDef func fill:#f1f5f9,stroke:#64748b,color:#1e293b
+    classDef test fill:#fbbf24,stroke:#d97706,color:#1e293b
 ```
 
 **Impact analysis — tree format:**
@@ -248,10 +250,10 @@ graph LR
     R2["views.login_handler<br/>risk: 1.5"]:::high
     ROOT --> R2
 
-    classDef changed fill:#bbf,stroke:#33a
-    classDef high fill:#fcc,stroke:#c33
-    classDef medium fill:#fed,stroke:#ca3
-    classDef low fill:#cfc,stroke:#3a3
+    classDef changed fill:#6366f1,stroke:#4338ca,color:#fff
+    classDef high fill:#ef4444,stroke:#b91c1c,color:#fff
+    classDef medium fill:#f59e0b,stroke:#d97706,color:#1e293b
+    classDef low fill:#22c55e,stroke:#15803d,color:#fff
 ```
 
 ---
