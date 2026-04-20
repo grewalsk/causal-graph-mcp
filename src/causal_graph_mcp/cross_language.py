@@ -230,7 +230,10 @@ def _routes_match(call_url: str, route_url: str, call_method: str | None, route_
 
     # Strip protocol/host from client URLs
     if "://" in call_url:
-        call_url = "/" + call_url.split("://", 1)[1].split("/", 1)[-1]
+        after_scheme = call_url.split("://", 1)[1]
+        slash = after_scheme.find("/")
+        call_url = after_scheme[slash:] if slash != -1 else "/"
+        call_url = call_url.rstrip("/")
 
     # Method matching (ANY matches everything)
     if call_method and route_method and route_method != "ANY" and call_method != "ANY":

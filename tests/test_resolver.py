@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from causal_graph_mcp.resolver import resolve_calls
 
 

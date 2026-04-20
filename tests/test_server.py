@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from causal_graph_mcp import server as server_module
 from causal_graph_mcp.indexer import index_project
-from causal_graph_mcp.server import _truncate, create_server
+from causal_graph_mcp.server import _truncate
 from causal_graph_mcp.storage import Storage
 
 
@@ -79,9 +78,7 @@ def _patch_storage(indexed_storage, monkeypatch):
 class TestToolHandlers:
     def test_index_project_tool(self, indexed_storage) -> None:
         storage, root = indexed_storage
-        srv = create_server()
-        # Call the tool via the server's tool list
-        # We test the handler logic directly by calling _get_storage path
+        # We test the handler logic directly by calling index_project
         from causal_graph_mcp.indexer import index_project as idx
         result = idx(root, storage)
         # Second index should skip all files

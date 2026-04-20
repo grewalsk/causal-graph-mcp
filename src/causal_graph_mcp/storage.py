@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
 from pathlib import Path
 from typing import Any
+
+
+def _fts_safe_query(query: str) -> str:
+    """Convert a user query into a safe FTS5 MATCH expression.
+
+    Splits on non-word characters and wraps each surviving token in double
+    quotes (with embedded " doubled). This treats FTS5 operators literally
+    and prevents syntax errors on queries like "user.create" or "a OR".
+    Returns "" when no usable tokens remain.
+    """
+    tokens = [t for t in re.split(r"\W+", query) if t]
+    if not tokens:
+        return ""
+    return " ".join(f'"{t.replace(chr(34), chr(34) * 2)}"' for t in tokens)
 
 
 class Storage:
@@ -69,30 +84,6 @@ class Storage:
             );
         """)
         self._conn.commit()
-
-    def _rebuild_fts_for_nodes(self, node_ids: list[str]) -> None:
-        """Rebuild FTS entries for the given node IDs."""
-        if not node_ids:
-            return
-        placeholders = ",".join("?" for _ in node_ids)
-        # Delete old FTS entries
-        rows = self._conn.execute(
-            f"SELECT rowid, id, signature, docstring FROM nodes WHERE id IN ({placeholders})",
-            node_ids,
-        ).fetchall()
-        for row in rows:
-            self._conn.execute(
-                "INSERT INTO nodes_fts(nodes_fts, rowid, id, signature, docstring) "
-                "VALUES('delete', ?, ?, ?, ?)",
-                (row["rowid"], row["id"], row["signature"] or "", row["docstring"] or ""),
-            )
-        # This won't work for delete-then-reinsert since the rowid changed.
-        # Instead, just rebuild for the current rows.
-        for row in rows:
-            self._conn.execute(
-                "INSERT INTO nodes_fts(rowid, id, signature, docstring) VALUES(?, ?, ?, ?)",
-                (row["rowid"], row["id"], row["signature"] or "", row["docstring"] or ""),
-            )
 
     def upsert_nodes(self, nodes: list[dict[str, Any]]) -> None:
         """Insert or replace nodes in the database and update FTS index."""
@@ -354,6 +345,11 @@ class Storage:
         limit: int = 10,
     ) -> list[dict[str, Any]]:
         """Search nodes via FTS5 BM25 ranking."""
+        if not query or not query.strip():
+            return []
+        fts_query = _fts_safe_query(query)
+        if not fts_query:
+            return []
         if kinds:
             placeholders = ",".join("?" for _ in kinds)
             rows = self._conn.execute(
@@ -366,7 +362,7 @@ class Storage:
                 ORDER BY rank
                 LIMIT ?
                 """,
-                [query] + kinds + [limit],
+                [fts_query] + kinds + [limit],
             ).fetchall()
         else:
             rows = self._conn.execute(
@@ -378,8 +374,13 @@ class Storage:
                 ORDER BY rank
                 LIMIT ?
                 """,
-                (query, limit),
+                (fts_query, limit),
             ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_all_edges(self) -> list[dict[str, Any]]:
+        """Return every edge in the database."""
+        rows = self._conn.execute("SELECT * FROM edges").fetchall()
         return [dict(r) for r in rows]
 
     def get_all_nodes(self, kind: str | None = None) -> list[dict[str, Any]]:

@@ -1,3 +1,3 @@
-"""causal-graph-mcp: MCP server for causal dependency graph analysis of Python codebases."""
+"""causal-graph-mcp: MCP server that indexes multi-language codebases into a causal dependency graph."""
 
-__version__ = "0.0.1"
+__version__ = "0.2.0"

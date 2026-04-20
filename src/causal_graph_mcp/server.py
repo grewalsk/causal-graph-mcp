@@ -13,7 +13,7 @@ from causal_graph_mcp.graph import get_subgraph
 from causal_graph_mcp.visualize import (
     render_impact_tree, render_mermaid, render_mermaid_impact, render_tree,
 )
-from causal_graph_mcp.indexer import IndexResult, index_files, index_project
+from causal_graph_mcp.indexer import index_files, index_project
 from causal_graph_mcp.language import register_parser
 from causal_graph_mcp.python_parser import PythonParser
 from causal_graph_mcp.risk import compute_impact
@@ -70,7 +70,11 @@ def _get_storage() -> Storage:
         def _on_change(files: list[str]) -> None:
             index_files(files, root_ref, storage_ref)
 
-        _server_watcher = FileWatcher(_server_project_root, _on_change)
+        def _on_delete(files: list[str]) -> None:
+            for f in files:
+                storage_ref.delete_file(f)
+
+        _server_watcher = FileWatcher(_server_project_root, _on_change, _on_delete)
         _server_watcher.start()
     return _server_storage
 
@@ -225,6 +229,12 @@ def create_server() -> FastMCP:
         storage = _get_storage()
 
         all_nodes = storage.get_all_nodes()
+        all_edges = storage.get_all_edges()
+
+        # Index edges by destination for in-degree lookups
+        in_edges_by_dst: dict[str, list[dict[str, Any]]] = {}
+        for e in all_edges:
+            in_edges_by_dst.setdefault(e["dst"], []).append(e)
 
         # Group by module
         modules_dict: dict[str, dict[str, Any]] = {}
@@ -242,16 +252,12 @@ def create_server() -> FastMCP:
         entry_points: list[str] = []
         for node in all_nodes:
             if node["kind"] in ("function", "method"):
-                in_edges = storage.get_edges(node["id"], direction="in")
-                call_edges = [e for e in in_edges if e["kind"] == "calls"]
-                if not call_edges:
+                in_edges = in_edges_by_dst.get(node["id"], [])
+                if not any(e["kind"] == "calls" for e in in_edges):
                     entry_points.append(node["id"])
 
         # Hot symbols: highest in-degree (top 10)
-        in_degree: dict[str, int] = {}
-        for node in all_nodes:
-            in_edges = storage.get_edges(node["id"], direction="in")
-            in_degree[node["id"]] = len(in_edges)
+        in_degree = {node["id"]: len(in_edges_by_dst.get(node["id"], [])) for node in all_nodes}
         hot_symbols = sorted(
             [{"id": k, "in_degree": v} for k, v in in_degree.items()],
             key=lambda x: x["in_degree"],
@@ -263,7 +269,7 @@ def create_server() -> FastMCP:
         symbols_with_assertions = 0
         for node in all_nodes:
             if node.get("is_public", 1) == 1 and node["kind"] in ("function", "method"):
-                in_edges = storage.get_edges(node["id"], direction="in")
+                in_edges = in_edges_by_dst.get(node["id"], [])
                 if any(e["kind"] == "asserts_on" for e in in_edges):
                     symbols_with_assertions += 1
 

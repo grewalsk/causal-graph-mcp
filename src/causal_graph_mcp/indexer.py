@@ -8,9 +8,8 @@ import time
 from dataclasses import dataclass
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any
 
-from causal_graph_mcp.language import get_parser, get_source_extensions, supported_extensions
+from causal_graph_mcp.language import get_parser, get_source_extensions
 from causal_graph_mcp.parser import parse_file
 from causal_graph_mcp.resolver import resolve_calls
 from causal_graph_mcp.storage import Storage
@@ -208,6 +207,7 @@ def _derive_module_name(file_path: str, project_root: str) -> str:
         "src/auth/utils.py" → "src.auth.utils"
         "src/auth/__init__.py" → "src.auth"
         "main.py" → "main"
+        "src/Foo.java" → "src.Foo"
     """
     rel_path = os.path.relpath(file_path, project_root)
     # Normalize separators
@@ -216,9 +216,11 @@ def _derive_module_name(file_path: str, project_root: str) -> str:
     # Handle __init__.py — use the package name
     if rel_path.endswith("/__init__.py"):
         module = rel_path[: -len("/__init__.py")]
+    elif rel_path == "__init__.py":
+        module = ""
     else:
-        # Strip .py extension
-        module = rel_path[:-3]
+        # Strip the file extension regardless of length (.py, .java, .tsx, etc.)
+        module = rel_path.rsplit(".", 1)[0] if "." in Path(rel_path).name else rel_path
 
     return module.replace("/", ".")
 
@@ -246,7 +248,7 @@ def _index_file(
         parse_result = parse_file(file_path, module_name)
 
     # Resolve call edges (jedi only works for Python, but the function is safe for others)
-    if file_path.endswith(".py"):
+    if Path(file_path).suffix.lower() == ".py":
         resolved_edges = resolve_calls(parse_result.edges, project_root)
     else:
         resolved_edges = parse_result.edges

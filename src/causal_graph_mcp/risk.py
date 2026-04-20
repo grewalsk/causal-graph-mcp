@@ -55,16 +55,15 @@ def compute_impact(
         if distance == 0:
             distance = 1  # Prevent division by zero
 
-        # Count assertion edges pointing to this node
-        all_edges = storage.get_edges(node["id"], direction="both")
-        assertion_count = sum(
-            1 for e in all_edges if e["kind"] == "asserts_on"
-        )
+        node_id = node["id"]
+        in_edges = storage.get_edges(node_id, direction="in")
+        out_edges = storage.get_edges(node_id, direction="out")
 
-        # Check for side-effect edges from this node
-        has_side_effects = any(
-            e["kind"] == "side_effect" for e in all_edges
-        )
+        # Assertion edges pointing *to* this node (tests that assert on it)
+        assertion_count = sum(1 for e in in_edges if e["kind"] == "asserts_on")
+
+        # Side-effect edges *from* this node (this node produces side effects)
+        has_side_effects = any(e["kind"] == "side_effect" for e in out_edges)
 
         # Check public API status
         is_public = node.get("is_public", 1) == 1
@@ -75,12 +74,13 @@ def compute_impact(
         public_api_weight = 1.5 if is_public else 1.0
         risk_score = (1 / distance) * assertion_weight * side_effect_weight * public_api_weight
 
-        # Build risk factors
+        # Build risk factors: who asserts on us, what we mutate, what side effects we produce
         risk_factors: list[str] = []
-        for e in all_edges:
+        for e in in_edges:
             if e["kind"] == "asserts_on":
-                risk_factors.append(f"asserts_on:{e['dst']}")
-            elif e["kind"] == "mutates":
+                risk_factors.append(f"asserts_on:{e['src']}")
+        for e in out_edges:
+            if e["kind"] == "mutates":
                 risk_factors.append(f"mutates:{e['dst']}")
             elif e["kind"] == "side_effect":
                 risk_factors.append(f"side_effect:{e.get('dst', 'unknown')}")

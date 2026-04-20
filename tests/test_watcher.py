@@ -5,8 +5,6 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-import pytest
-
 from causal_graph_mcp.watcher import FileWatcher
 
 
@@ -77,5 +75,66 @@ class TestFileWatcher:
 
             # Should have batched into fewer callbacks than total writes
             assert len(changes) >= 1
+        finally:
+            watcher.stop()
+
+    def test_detects_deletion(self, tmp_path: Path) -> None:
+        """Watcher invokes on_delete when a tracked source file is removed."""
+        changes: list[list[str]] = []
+        deletes: list[list[str]] = []
+
+        py_file = tmp_path / "mod.py"
+        py_file.write_text("x = 1")
+
+        watcher = FileWatcher(
+            str(tmp_path),
+            on_change=lambda f: changes.append(f),
+            on_delete=lambda f: deletes.append(f),
+            debounce_ms=100,
+        )
+        watcher.start()
+
+        try:
+            time.sleep(0.3)  # let initial create settle
+            changes.clear()
+            py_file.unlink()
+            time.sleep(0.5)
+
+            deleted_files = [f for batch in deletes for f in batch]
+            assert any("mod.py" in f for f in deleted_files), deletes
+            # Deletion should not be reported as a change
+            changed_files = [f for batch in changes for f in batch]
+            assert not any("mod.py" in f for f in changed_files)
+        finally:
+            watcher.stop()
+
+    def test_rename_reports_delete_and_create(self, tmp_path: Path) -> None:
+        """Renaming a source file fires on_delete for the old path and on_change for the new."""
+        changes: list[list[str]] = []
+        deletes: list[list[str]] = []
+
+        old = tmp_path / "old.py"
+        old.write_text("x = 1")
+
+        watcher = FileWatcher(
+            str(tmp_path),
+            on_change=lambda f: changes.append(f),
+            on_delete=lambda f: deletes.append(f),
+            debounce_ms=100,
+        )
+        watcher.start()
+
+        try:
+            time.sleep(0.3)
+            changes.clear()
+            deletes.clear()
+            new = tmp_path / "new.py"
+            old.rename(new)
+            time.sleep(0.5)
+
+            deleted_files = [f for batch in deletes for f in batch]
+            changed_files = [f for batch in changes for f in batch]
+            assert any("old.py" in f for f in deleted_files), deletes
+            assert any("new.py" in f for f in changed_files), changes
         finally:
             watcher.stop()

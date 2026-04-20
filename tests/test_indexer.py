@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from causal_graph_mcp.indexer import (
-    IndexResult,
     _derive_module_name,
     _discover_files,
     index_files,

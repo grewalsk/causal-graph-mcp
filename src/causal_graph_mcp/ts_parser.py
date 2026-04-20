@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -506,14 +505,20 @@ class TreeSitterParser:
         return None
 
     def _match_side_effect(self, call_name: str) -> str | None:
-        """Match a call against known side-effect patterns."""
+        """Match a call against known side-effect patterns.
+
+        Matches exact names, dotted-namespace patterns ("fs." → "fs.readFile"),
+        and dotted method calls on a bare name ("fetch" → "fetch.xyz"). Does NOT
+        match substring prefixes like "fetch" → "fetchData".
+        """
         patterns = _SIDE_EFFECTS.get(self._lang_name, {})
         if call_name in patterns:
             return patterns[call_name]
         for prefix, kind in patterns.items():
-            if prefix.endswith(".") and call_name.startswith(prefix):
-                return kind
-            if call_name.startswith(prefix):
+            if prefix.endswith("."):
+                if call_name.startswith(prefix):
+                    return kind
+            elif call_name.startswith(prefix + "."):
                 return kind
         return None
 

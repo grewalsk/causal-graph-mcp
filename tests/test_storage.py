@@ -209,14 +209,6 @@ class TestFileScopedUpdate:
         storage.set_file_hash("auth.py", "original_hash")
 
         bad_nodes = [_make_node("auth.new", file="auth.py", module="auth")]
-        # Use an edge referencing a column that doesn't exist to trigger a real error
-        # after the delete has happened but during the edge insert.
-        # Instead, we patch insert_edges to raise mid-transaction.
-        original_insert_edges = storage.insert_edges
-
-        def failing_insert(edges):
-            raise sqlite3.OperationalError("simulated failure")
-
         # The update_file_scope does its own edge inserts inline, so we need to
         # make the connection raise during the edge INSERT within the transaction.
         # We'll wrap the connection with a proxy.

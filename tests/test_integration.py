@@ -246,10 +246,8 @@ def revoke_token(token: str) -> bool:
                 assert entry["risk_score"] > 0
                 assert "risk_factors" in entry
 
-            # Tests should be in at_risk
-            test_entries = [e for e in result.at_risk if e.get("is_test")]
-            # We expect test functions to show up
-            assert result.summary["tests_at_risk"] >= 0  # At least computable
+            # We expect test functions to show up (or at least the count to be computable)
+            assert result.summary["tests_at_risk"] >= 0
 
             # Verify summary classification
             total = result.summary["high_risk"] + result.summary["medium_risk"] + result.summary["low_risk"]
